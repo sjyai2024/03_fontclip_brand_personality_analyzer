@@ -1,0 +1,2 @@
+# 03_fontclip_brand_personality_analyzer
+03_fontclip_brand_personality_analyzer
