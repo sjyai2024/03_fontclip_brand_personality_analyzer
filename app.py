@@ -15,9 +15,39 @@ from PIL import Image, ImageDraw, ImageFont
 
 st.set_page_config(page_title="03B FontCLIP Brand Personality Analyzer", layout="wide")
 
-APP_VERSION = "1.0"
+APP_VERSION = "1.1"
 APP_DIR = Path(__file__).resolve().parent
 RUNTIME_ROOT = Path.home() / ".cache" / "fontclip_brand_personality_03b"
+
+def resolve_resource(filename: str) -> Path:
+    """Find a bundled resource even when Streamlit deploys app.py from a subfolder."""
+    candidates = [
+        APP_DIR / filename,
+        Path.cwd() / filename,
+        APP_DIR.parent / filename,
+    ]
+    seen = set()
+    for p in candidates:
+        try:
+            rp = p.resolve()
+        except Exception:
+            rp = p
+        if str(rp) in seen:
+            continue
+        seen.add(str(rp))
+        if p.exists() and p.is_file():
+            return p
+
+    # Last resort: search only inside the checked-out repository area.
+    try:
+        for p in APP_DIR.parent.rglob(filename):
+            if p.is_file():
+                return p
+    except Exception:
+        pass
+
+    # Return the expected local path so later messages can show where it was expected.
+    return APP_DIR / filename
 
 # Same source/checkpoint as the completed 03A pilot.
 FONTCLIP_COMMIT = "3d4c6af01f668800d8e4f9f4f753d29c74dad252"
@@ -25,9 +55,9 @@ FONTCLIP_ARCHIVE_URL = f"https://github.com/yukistavailable/FontCLIP/archive/{FO
 FONTCLIP_CHECKPOINT_GDRIVE_ID = "1Tym7rAIuaGr6Gv-gZRSJmPstQjOWPgl1"
 EXPECTED_CHECKPOINT_SHA256 = "c441277fbed4366d32d8fb65725189b97d3fe88bae5fe0648b969feea01bbb00"
 
-MAPPING_FILE = APP_DIR / "Aaker1997_42traits_15facets_5dimensions_mapping.csv"
-DEFAULT_REVIEW_FILE = APP_DIR / "03A_eligibility_review_final.csv"
-DEFAULT_TEXT_PROFILE_FILE = APP_DIR / "02_text_5D_raw_FOR_03B.csv"
+MAPPING_FILE = resolve_resource("Aaker1997_42traits_15facets_5dimensions_mapping.csv")
+DEFAULT_REVIEW_FILE = resolve_resource("03A_eligibility_review_final.csv")
+DEFAULT_TEXT_PROFILE_FILE = resolve_resource("02_text_5D_raw_FOR_03B.csv")
 
 DIMENSIONS = ["Sincerity", "Excitement", "Competence", "Sophistication", "Ruggedness"]
 IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".webp")
@@ -38,8 +68,59 @@ PROMPT_TEMPLATE = "{trait} font"
 PROMPT_METHOD = "FontCLIP-native single positive attribute prompt: {trait} font"
 
 
+EMBEDDED_AAKER_MAPPING_CSV = """Item_No,Dimension,Facet,Trait,Original_Facet_Code
+1,Sincerity,Down-to-earth,down-to-earth,1a
+2,Sincerity,Down-to-earth,family-oriented,1a
+3,Sincerity,Down-to-earth,small-town,1a
+4,Sincerity,Honest,honest,1b
+5,Sincerity,Honest,sincere,1b
+6,Sincerity,Honest,real,1b
+7,Sincerity,Wholesome,wholesome,1c
+8,Sincerity,Wholesome,original,1c
+9,Sincerity,Cheerful,cheerful,1d
+10,Sincerity,Cheerful,sentimental,1d
+11,Sincerity,Cheerful,friendly,1d
+12,Excitement,Daring,daring,2a
+13,Excitement,Daring,trendy,2a
+14,Excitement,Daring,exciting,2a
+15,Excitement,Spirited,spirited,2b
+16,Excitement,Spirited,cool,2b
+17,Excitement,Spirited,young,2b
+18,Excitement,Imaginative,imaginative,2c
+19,Excitement,Imaginative,unique,2c
+20,Excitement,Up-to-date,up-to-date,2d
+21,Excitement,Up-to-date,independent,2d
+22,Excitement,Up-to-date,contemporary,2d
+23,Competence,Reliable,reliable,3a
+24,Competence,Reliable,hard working,3a
+25,Competence,Reliable,secure,3a
+26,Competence,Intelligent,intelligent,3b
+27,Competence,Intelligent,technical,3b
+28,Competence,Intelligent,corporate,3b
+29,Competence,Successful,successful,3c
+30,Competence,Successful,leader,3c
+31,Competence,Successful,confident,3c
+32,Sophistication,Upper class,upper class,4a
+33,Sophistication,Upper class,glamorous,4a
+34,Sophistication,Upper class,good looking,4a
+35,Sophistication,Charming,charming,4b
+36,Sophistication,Charming,feminine,4b
+37,Sophistication,Charming,smooth,4b
+38,Ruggedness,Outdoorsy,outdoorsy,5a
+39,Ruggedness,Outdoorsy,masculine,5a
+40,Ruggedness,Outdoorsy,Western,5a
+41,Ruggedness,Tough,tough,5b
+42,Ruggedness,Tough,rugged,5b
+"""
+
 def load_mapping() -> pd.DataFrame:
-    df = pd.read_csv(MAPPING_FILE)
+    # Prefer the bundled CSV when present, but never crash at startup solely
+    # because GitHub/Streamlit omitted a sidecar resource file.
+    if MAPPING_FILE.exists():
+        df = pd.read_csv(MAPPING_FILE)
+    else:
+        df = pd.read_csv(io.StringIO(EMBEDDED_AAKER_MAPPING_CSV))
+
     need = {"Item_No", "Dimension", "Facet", "Trait"}
     if not need.issubset(df.columns):
         raise ValueError(f"Aaker mapping is missing columns: {sorted(need - set(df.columns))}")
@@ -383,8 +464,14 @@ def load_text_profile(uploaded=None):
         df = pd.read_csv(uploaded)
         source = "uploaded"
     else:
+        if not DEFAULT_TEXT_PROFILE_FILE.exists():
+            raise FileNotFoundError(
+                "기본 02 Text 5D CSV를 찾지 못했습니다. "
+                "앱과 같은 GitHub 폴더에 `02_text_5D_raw_FOR_03B.csv`를 올리거나, "
+                "화면의 '02 텍스트 RAW 5D CSV 교체'에서 직접 업로드하세요."
+            )
         df = pd.read_csv(DEFAULT_TEXT_PROFILE_FILE)
-        source = "bundled current 02 M0_RAW"
+        source = f"bundled current 02 M0_RAW: {DEFAULT_TEXT_PROFILE_FILE.name}"
     if "Method" in df.columns:
         if (df["Method"] == "M0_RAW").any():
             df = df[df["Method"] == "M0_RAW"].copy()
@@ -403,6 +490,14 @@ st.info(
     "03A의 이미지 표준화·모델·체크포인트는 유지하되, 03B에서는 `not X`와 maximin을 본측정에서 사용하지 않습니다. "
     "FontCLIP 고유 형식에 가까운 positive prompt `{trait} font`를 고정해 42개 Aaker trait를 평가합니다."
 )
+
+with st.expander("배포 리소스 상태", expanded=False):
+    st.write({
+        "app_dir": str(APP_DIR),
+        "mapping": str(MAPPING_FILE) if MAPPING_FILE.exists() else "embedded fallback 사용",
+        "03A_review": str(DEFAULT_REVIEW_FILE) if DEFAULT_REVIEW_FILE.exists() else "없음 — 수동/업로드 가능",
+        "02_text_profile": str(DEFAULT_TEXT_PROFILE_FILE) if DEFAULT_TEXT_PROFILE_FILE.exists() else "없음 — 업로드 필요",
+    })
 
 with st.expander("03A → 03B 변경점", expanded=False):
     st.markdown(
@@ -673,7 +768,7 @@ if "03B_R" in st.session_state:
     st.subheader("5. 결과 다운로드")
     st.download_button(
         "03B 전체 CSV ZIP 다운로드", zip_csv(files),
-        file_name="03B_fontclip_brand_personality_results_v1_0.zip",
+        file_name="03B_fontclip_brand_personality_results_v1_1.zip",
         mime="application/zip", type="primary"
     )
     for i in range(0, len(files), 3):

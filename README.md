@@ -106,3 +106,18 @@ Streamlit Community Cloud에서는 Python 3.12를 권장합니다.
 
 ## 해석 주의
 FontCLIP은 Aaker 브랜드 개성 척도를 위해 개발된 모델이 아닙니다. 본 연구의 5D 점수는 Aaker 구조를 FontCLIP semantic typography space에 조작적으로 적용한 계산 프로파일입니다. 최종 외적 타당성은 05 인간평가에서 별도로 검증합니다.
+
+## v1.1 Streamlit 배포 수정
+
+v1.0에서 `Aaker1997_42traits_15facets_5dimensions_mapping.csv`가
+`app.py`와 같은 배포 폴더에 없을 경우 앱 시작 시 `FileNotFoundError`가 발생할 수 있었습니다.
+
+v1.1은 다음을 적용했습니다.
+
+- `app.py` 위치뿐 아니라 현재 작업폴더와 저장소 상위폴더에서 리소스 자동 탐색
+- Aaker 42-trait mapping을 `app.py` 내부 fallback으로 포함
+- 03A 검토 CSV가 없으면 앱은 계속 실행되고 수동 검토 가능
+- 02 Text 5D CSV가 없으면 앱 전체가 종료되지 않고 RQ1 결합만 건너뛰거나 업로드 요청
+- 화면의 `배포 리소스 상태`에서 실제 탐색 경로 확인 가능
+
+GitHub에는 가능하면 이 폴더의 파일을 **모두 같은 디렉터리**에 올리는 것을 권장합니다.
