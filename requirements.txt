@@ -1,0 +1,16 @@
+streamlit>=1.32,<2
+pandas>=2.0,<3
+numpy==1.26.4
+matplotlib>=3.8,<4
+Pillow>=10,<13
+requests>=2.31,<3
+gdown>=5.2,<6
+ftfy>=6.1,<7
+regex>=2024.0
+tqdm>=4.66,<5
+packaging>=24,<26
+setuptools==80.8.0
+
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.5.1+cpu
+torchvision==0.20.1+cpu
